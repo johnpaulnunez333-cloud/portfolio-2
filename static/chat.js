@@ -1,4 +1,7 @@
-const socket = io();
+const socket = io({
+  transports: ['websocket', 'polling']
+});
+
 const messagesEl = document.getElementById('chatMessages');
 const msgInput = document.getElementById('msgInput');
 const sendBtn = document.getElementById('sendBtn');
@@ -44,7 +47,6 @@ function updateOnline(users) {
   `).join('');
 }
 
-// Socket events
 socket.on('connect', () => {
   chatStatus.textContent = 'Connected ✓';
   chatStatus.classList.add('connected');
@@ -79,7 +81,6 @@ socket.on('user_left', (data) => {
   updateOnline(data.online);
 });
 
-// Send message
 function sendMessage() {
   const content = msgInput.value.trim();
   if (!content) return;
@@ -100,7 +101,6 @@ msgInput.addEventListener('input', () => {
   charCount.textContent = `${msgInput.value.length}/500`;
 });
 
-// Nav toggle
 const navToggle = document.getElementById('navToggle');
 const navLinks = document.querySelector('.nav-links');
 if (navToggle) {
