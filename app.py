@@ -145,5 +145,5 @@ def on_disconnect():
     if username:
         emit("user_left", {"username": username, "online": list(online_users.values())}, to="mdn-chat")
 
-if __name__ == "__main__":
+if __name__ == "__main__
     socketio.run(app, host="0.0.0.0", port=5000, debug=True)
