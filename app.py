@@ -145,5 +145,7 @@ def on_disconnect():
     if username:
         emit("user_left", {"username": username, "online": list(online_users.values())}, to="mdn-chat")
 
-if __name__ == "__main__
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
+if __name__ == "__main__":
+    # Babasahin nito ang port na binibigay ng Railway, kung wala (gaya ng local), gagamit ito ng 5000
+    port = int(os.environ.get("PORT", 5000))
+    socketio.run(app, host="0.0.0.0", port=port, debug=False)
