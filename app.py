@@ -1,10 +1,14 @@
 from flask import Flask, render_template, request, redirect, url_for, session
+from flask_socketio import SocketIO, emit, join_room, leave_room
 import json, os, bcrypt, re
+from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = "mdn_secret_key_2025"
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 USERS_FILE = "users.json"
+MESSAGES_FILE = "messages.json"
 
 def load_users():
     if not os.path.exists(USERS_FILE):
@@ -16,6 +20,16 @@ def save_users(users):
     with open(USERS_FILE, "w") as f:
         json.dump(users, f)
 
+def load_messages():
+    if not os.path.exists(MESSAGES_FILE):
+        return []
+    with open(MESSAGES_FILE, "r") as f:
+        return json.load(f)
+
+def save_messages(messages):
+    with open(MESSAGES_FILE, "w") as f:
+        json.dump(messages, f)
+
 def hash_password(password):
     salt = bcrypt.gensalt()
     return bcrypt.hashpw(password.encode(), salt).decode()
@@ -25,6 +39,8 @@ def check_password(password, hashed):
 
 def valid_email(email):
     return re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email)
+
+online_users = {}
 
 @app.route("/")
 def home():
@@ -39,7 +55,6 @@ def login():
         login_input = request.form.get("login_input", "").strip()
         password = request.form.get("password", "").strip()
         users = load_users()
-        # Allow login via username OR email
         matched_user = None
         for uname, udata in users.items():
             if uname == login_input or udata.get("email", "") == login_input:
@@ -62,7 +77,6 @@ def signup():
         password = request.form.get("password", "").strip()
         confirm  = request.form.get("confirm", "").strip()
         users = load_users()
-        # Validations
         if not username or not email or not password:
             error = "All fields are required."
         elif not valid_email(email):
@@ -76,10 +90,7 @@ def signup():
         elif len(password) < 6:
             error = "Password must be at least 6 characters."
         else:
-            users[username] = {
-                "email": email,
-                "password": hash_password(password)
-            }
+            users[username] = {"email": email, "password": hash_password(password)}
             save_users(users)
             success = "Account created! You can now log in."
     return render_template("signup.html", error=error, success=success)
@@ -101,6 +112,41 @@ def logout():
     session.clear()
     return redirect(url_for("login"))
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+# SocketIO Events
+@socketio.on("join")
+def on_join(data):
+    username = data.get("username")
+    online_users[request.sid] = username
+    join_room("mdn-chat")
+    # Send last 50 messages
+    messages = load_messages()[-50:]
+    emit("load_messages", messages)
+    # Notify others
+    emit("user_joined", {"username": username, "online": list(online_users.values())}, to="mdn-chat")
 
+@socketio.on("send_message")
+def on_message(data):
+    username = online_users.get(request.sid, "Unknown")
+    content = data.get("content", "").strip()
+    if not content or len(content) > 500:
+        return
+    msg = {
+        "username": username,
+        "content": content,
+        "time": datetime.now().strftime("%I:%M %p")
+    }
+    messages = load_messages()
+    messages.append(msg)
+    if len(messages) > 200:
+        messages = messages[-200:]
+    save_messages(messages)
+    emit("new_message", msg, to="mdn-chat")
+
+@socketio.on("disconnect")
+def on_disconnect():
+    username = online_users.pop(request.sid, None)
+    if username:
+        emit("user_left", {"username": username, "online": list(online_users.values())}, to="mdn-chat")
+
+if __name__ == "__main__":
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
