@@ -1,5 +1,4 @@
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
+const socket = io();
 const messagesEl = document.getElementById('chatMessages');
 const msgInput = document.getElementById('msgInput');
 const sendBtn = document.getElementById('sendBtn');
@@ -8,32 +7,23 @@ const chatStatus = document.getElementById('chatStatus');
 const onlineCount = document.getElementById('onlineCount');
 const onlineUsers = document.getElementById('onlineUsers');
 
-let channel;
-let presenceChannel;
-const onlineMap = {};
-
-function formatTime(ts) {
-  const d = new Date(ts);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+function escapeHTML(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function renderMessage(msg, prepend = false) {
+function renderMessage(msg) {
   const isMine = msg.username === USERNAME;
   const wrapper = document.createElement('div');
   wrapper.className = `msg-wrapper ${isMine ? 'mine' : 'theirs'}`;
   wrapper.innerHTML = `
     <div class="msg-meta">
-      <span class="msg-username">${isMine ? 'You' : msg.username}</span>
-      <span>${formatTime(msg.created_at)}</span>
+      <span class="msg-username">${isMine ? 'You' : escapeHTML(msg.username)}</span>
+      <span>${msg.time}</span>
     </div>
     <div class="msg-bubble">${escapeHTML(msg.content)}</div>
   `;
-  if (prepend) {
-    messagesEl.insertBefore(wrapper, messagesEl.firstChild);
-  } else {
-    messagesEl.appendChild(wrapper);
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-  }
+  messagesEl.appendChild(wrapper);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
 function systemMsg(text) {
@@ -44,12 +34,7 @@ function systemMsg(text) {
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
-function escapeHTML(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-function updateOnlineUsers() {
-  const users = Object.values(onlineMap);
+function updateOnline(users) {
   onlineCount.textContent = `● ${users.length} online`;
   onlineUsers.innerHTML = users.map(u => `
     <div class="online-user-item">
@@ -59,87 +44,49 @@ function updateOnlineUsers() {
   `).join('');
 }
 
-async function loadMessages() {
-  const { data, error } = await supabase
-    .from('messages')
-    .select('*')
-    .order('created_at', { ascending: true })
-    .limit(50);
+// Socket events
+socket.on('connect', () => {
+  chatStatus.textContent = 'Connected ✓';
+  chatStatus.classList.add('connected');
+  socket.emit('join', { username: USERNAME });
+});
 
+socket.on('disconnect', () => {
+  chatStatus.textContent = 'Disconnected';
+  chatStatus.classList.remove('connected');
+});
+
+socket.on('load_messages', (messages) => {
   messagesEl.innerHTML = '';
-
-  if (error) {
-    systemMsg('Could not load messages.');
-    return;
-  }
-
-  if (data.length === 0) {
+  if (messages.length === 0) {
     systemMsg('No messages yet. Say hi! 👋');
   } else {
-    data.forEach(msg => renderMessage(msg));
+    messages.forEach(msg => renderMessage(msg));
   }
-  messagesEl.scrollTop = messagesEl.scrollHeight;
-}
+});
 
-async function sendMessage() {
+socket.on('new_message', (msg) => {
+  renderMessage(msg);
+});
+
+socket.on('user_joined', (data) => {
+  systemMsg(`${data.username} joined the chat`);
+  updateOnline(data.online);
+});
+
+socket.on('user_left', (data) => {
+  systemMsg(`${data.username} left the chat`);
+  updateOnline(data.online);
+});
+
+// Send message
+function sendMessage() {
   const content = msgInput.value.trim();
   if (!content) return;
-
-  sendBtn.disabled = true;
+  socket.emit('send_message', { content });
   msgInput.value = '';
   charCount.textContent = '0/500';
-
-  const { error } = await supabase.from('messages').insert([{
-    username: USERNAME,
-    content: content
-  }]);
-
-  if (error) {
-    systemMsg('Failed to send message. Try again.');
-  }
-
-  sendBtn.disabled = false;
   msgInput.focus();
-}
-
-function subscribeRealtime() {
-  channel = supabase
-    .channel('mdn-chat')
-    .on('postgres_changes', {
-      event: 'INSERT',
-      schema: 'public',
-      table: 'messages'
-    }, payload => {
-      renderMessage(payload.new);
-    })
-    .subscribe(status => {
-      if (status === 'SUBSCRIBED') {
-        chatStatus.textContent = 'Connected ✓';
-        chatStatus.classList.add('connected');
-      } else {
-        chatStatus.textContent = 'Connecting...';
-        chatStatus.classList.remove('connected');
-      }
-    });
-
-  presenceChannel = supabase.channel('mdn-presence');
-  presenceChannel
-    .on('presence', { event: 'sync' }, () => {
-      const state = presenceChannel.presenceState();
-      Object.keys(onlineMap).forEach(k => delete onlineMap[k]);
-      Object.values(state).forEach(presences => {
-        presences.forEach(p => { onlineMap[p.user_id] = p.username; });
-      });
-      updateOnlineUsers();
-    })
-    .subscribe(async status => {
-      if (status === 'SUBSCRIBED') {
-        await presenceChannel.track({
-          user_id: USERNAME + '_' + Date.now(),
-          username: USERNAME
-        });
-      }
-    });
 }
 
 sendBtn.addEventListener('click', sendMessage);
@@ -153,11 +100,9 @@ msgInput.addEventListener('input', () => {
   charCount.textContent = `${msgInput.value.length}/500`;
 });
 
+// Nav toggle
 const navToggle = document.getElementById('navToggle');
 const navLinks = document.querySelector('.nav-links');
 if (navToggle) {
   navToggle.addEventListener('click', () => navLinks.classList.toggle('open'));
 }
-
-loadMessages();
-subscribeRealtime();
