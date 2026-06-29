@@ -34,10 +34,10 @@
     <div class="chat-sidebar">
       <div class="sidebar-header">
         <h3>💬 MDN Chat</h3>
-        <span class="online-badge" id="onlineCount">● 1 online</span>
+        <span class="online-badge" id="onlineCount">● 0 online</span>
       </div>
       <div class="sidebar-info">
-        <p>.</p>
+        <p>MDN Group Chat — members only.</p>
       </div>
       <div class="online-users" id="onlineUsers"></div>
     </div>
@@ -53,13 +53,7 @@
         </div>
       </div>
 
-      <div class="chat-messages" id="chatMessages">
-        <div class="chat-loading">
-          <div class="loading-dot"></div>
-          <div class="loading-dot"></div>
-          <div class="loading-dot"></div>
-        </div>
-      </div>
+      <div class="chat-messages" id="chatMessages"></div>
 
       <div class="chat-input-area">
         <div class="chat-input-wrap">
@@ -76,13 +70,10 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script>
-    const SUPABASE_URL = 'https://xgawymwkfqthtotoeemo.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhnYXd5bXdrZnF0aHRvdG9lZW1vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2NzUzMDAsImV4cCI6MjA5ODI1MTMwMH0.XYpcnUjLT4Yw4og4HLJ09ysNPp2Rvlfc5h4-7YrMisE';
     const USERNAME = '{{ username }}';
   </script>
   <script src="{{ url_for('static', filename='chat.js') }}"></script>
 </body>
 </html>
-
