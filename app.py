@@ -1,11 +1,11 @@
 from flask import Flask, render_template, request, redirect, url_for, session
-from flask_socketio import SocketIO, emit, join_room, leave_room
+from flask_socketio import SocketIO, emit, join_room
 import json, os, bcrypt, re
 from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = "mdn_secret_key_2025"
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
 USERS_FILE = "users.json"
 MESSAGES_FILE = "messages.json"
@@ -112,16 +112,13 @@ def logout():
     session.clear()
     return redirect(url_for("login"))
 
-# SocketIO Events
 @socketio.on("join")
 def on_join(data):
     username = data.get("username")
     online_users[request.sid] = username
     join_room("mdn-chat")
-    # Send last 50 messages
     messages = load_messages()[-50:]
     emit("load_messages", messages)
-    # Notify others
     emit("user_joined", {"username": username, "online": list(online_users.values())}, to="mdn-chat")
 
 @socketio.on("send_message")
